@@ -58,7 +58,7 @@ const components: { title: string; href: string; description: string }[] = [
 export default function NavbarComponent() {
     return (
         <div
-            className='sticky top-0 p-2 flex justify-center items-center gap-3 bg-white'>
+            className='sticky top-0 p-2 z-50 flex justify-center items-center gap-3 bg-white'>
             <NavigationMenu>
                 <NavigationMenuList>
                     <NavigationMenuItem>

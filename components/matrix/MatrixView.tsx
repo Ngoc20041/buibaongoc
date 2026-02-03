@@ -1,41 +1,69 @@
-// components/matrix-view.tsx
+'use client'
+import {useRef} from "react"
+import MatrixGrid from "@/components/matrix/MatrixGrid"
 
-import {Card, CardContent} from "@/components/ui/card";
+export default function MatrixView({n, m}: { n: number; m: number }) {
+    const viewRef = useRef<HTMLDivElement>(null)
 
-interface MatrixViewProps {
-    n: number
-    m: number
-}
+    const state = useRef({
+        x: 0,
+        y: 0,
+        scale: 1,
+        dragging: false,
+        startX: 0,
+        startY: 0,
+    })
 
-export default function MatrixView({n, m}: MatrixViewProps) {
-    // utils/matrix.ts
-    function createMatrix(n: number, m: number): number[][] {
-        return Array.from({length: n}, (_, i) =>
-            Array.from({length: m}, (_, j) => i * m + j)
-        )
+    const updateTransform = () => {
+        const s = state.current
+        if (!viewRef.current) return
+
+        viewRef.current.style.transform =
+            `translate(${s.x}px, ${s.y}px) scale(${s.scale})`
     }
-    const matrix = createMatrix(n, m)
+
+    const onWheel = (e: React.WheelEvent) => {
+        e.preventDefault()
+        const s = state.current
+        s.scale = Math.min(3, Math.max(0.2, s.scale - e.deltaY * 0.001))
+        updateTransform()
+    }
+
+    const onMouseDown = (e: React.MouseEvent) => {
+        const s = state.current
+        s.dragging = true
+        s.startX = e.clientX - s.x
+        s.startY = e.clientY - s.y
+    }
+
+    const onMouseMove = (e: React.MouseEvent) => {
+        const s = state.current
+        if (!s.dragging) return
+
+        s.x = e.clientX - s.startX
+        s.y = e.clientY - s.startY
+        updateTransform()
+    }
+
+    const onMouseUp = () => {
+        state.current.dragging = false
+    }
+
     return (
-        <Card className="w-fit">
-            <CardContent className="p-4">
-                <div
-                    className="grid gap-1"
-                    style={{
-                        gridTemplateColumns: `repeat(${m}, minmax(32px, 1fr))`,
-                    }}
-                >
-                    {matrix.flat().map((value, index) => (
-                        <div
-                            key={index}
-                            className="flex h-8 w-8 items-center justify-center rounded border text-sm"
-                        >
-                            <p className='text-muted-foreground/50'>
-                                {value}
-                            </p>
-                        </div>
-                    ))}
-                </div>
-            </CardContent>
-        </Card>
+        <div
+            className="w-full h-full overflow-hidden border bg-muted"
+            onWheel={onWheel}
+            onMouseDown={onMouseDown}
+            onMouseMove={onMouseMove}
+            onMouseUp={onMouseUp}
+            onMouseLeave={onMouseUp}
+        >
+            <div
+                ref={viewRef}
+                className="origin-top-left will-change-transform"
+            >
+                <MatrixGrid n={n} m={m}/>
+            </div>
+        </div>
     )
 }

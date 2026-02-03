@@ -27,11 +27,11 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="en">
-        <body
-            className={`${geistSans.variable} ${geistMono.variable} antialiased `}
+        <body suppressHydrationWarning
+              className={`${geistSans.variable} ${geistMono.variable} antialiased `}
         >
-        <NavbarComponent/>
-        <main>{children}</main>
+        {/*<NavbarComponent/>*/}
+        <main >{children}</main>
         <Toaster/>
         <FooterComponent/>
         </body>
