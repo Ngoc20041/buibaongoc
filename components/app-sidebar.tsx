@@ -47,7 +47,7 @@ const data = {
     ],
 }
 type AppSidebarProps = {
-    onOpenSettingMatrix: () => void
+    onOpenSettingMatrix?: () => void
 }
 
 export function AppSidebar({onOpenSettingMatrix, ...props}: AppSidebarProps) {

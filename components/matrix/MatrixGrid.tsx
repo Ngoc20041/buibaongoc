@@ -13,7 +13,7 @@ function MatrixGrid({ n, m }: { n: number; m: number }) {
             {Array.from({ length: n * m }).map((_, i) => (
                 <div
                     key={i}
-                    className="border text-xs flex items-center justify-center select-none"
+                    className="border border-gray-700 text-xs flex items-center justify-center select-none"
                     style={{ width: cellSize, height: cellSize }}
                 >
                     {i}
@@ -24,3 +24,5 @@ function MatrixGrid({ n, m }: { n: number; m: number }) {
 }
 
 export default memo(MatrixGrid)
+
+

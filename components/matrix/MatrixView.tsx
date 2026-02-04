@@ -1,6 +1,6 @@
 'use client'
 import {useRef} from "react"
-import MatrixGrid from "@/components/matrix/MatrixGrid"
+import TestPage from "@/app/test/page";
 
 export default function MatrixView({n, m}: { n: number; m: number }) {
     const viewRef = useRef<HTMLDivElement>(null)
@@ -51,7 +51,7 @@ export default function MatrixView({n, m}: { n: number; m: number }) {
 
     return (
         <div
-            className="w-full h-full overflow-hidden border bg-muted"
+            className=" border bg-muted"
             onWheel={onWheel}
             onMouseDown={onMouseDown}
             onMouseMove={onMouseMove}
@@ -62,7 +62,8 @@ export default function MatrixView({n, m}: { n: number; m: number }) {
                 ref={viewRef}
                 className="origin-top-left will-change-transform"
             >
-                <MatrixGrid n={n} m={m}/>
+                {/*<MatrixGrid n={n} m={m}/>*/}
+                <TestPage/>
             </div>
         </div>
     )

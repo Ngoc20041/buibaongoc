@@ -1,14 +1,16 @@
 "use client"
 
-import {useEffect, useRef} from "react"
+import { useEffect, useRef } from "react"
 
 /* ================= CONFIG ================= */
 
-const ROWS = 250
-const COLS = 250
+const ROWS = 100
+const COLS = 100
 const CELL_SIZE = 8
 const WIDTH = COLS * CELL_SIZE
 const HEIGHT = ROWS * CELL_SIZE
+
+const SAFETY_FUEL = 0.5
 
 /* ================= TYPES ================= */
 
@@ -53,60 +55,114 @@ function manhattan(a: Point, b: Point) {
 }
 
 function fuelNeeded(distance: number) {
-    return Math.ceil(distance / 20)
+    return distance / 20
 }
 
 function buildPath(from: Point, to: Point): Point[] {
     const path: Point[] = []
-    let {x, y} = from
+    let { x, y } = from
 
     while (x !== to.x) {
         x += x < to.x ? 1 : -1
-        path.push({x, y})
+        path.push({ x, y })
     }
     while (y !== to.y) {
         y += y < to.y ? 1 : -1
-        path.push({x, y})
+        path.push({ x, y })
     }
     return path
 }
 
-/* ================= DRAW ================= */
-function drawStaticGrid(ctx: CanvasRenderingContext2D) {
-    ctx.strokeStyle = "#eee"
-    for (let y = 0; y < ROWS; y++) {
-        for (let x = 0; x < COLS; x++) {
-            ctx.strokeRect(
-                x * CELL_SIZE,
-                y * CELL_SIZE,
-                CELL_SIZE,
-                CELL_SIZE
-            )
+/* ================= RANDOM MAP ================= */
+
+function randomPoint(): Point {
+    return {
+        x: Math.floor(Math.random() * COLS),
+        y: Math.floor(Math.random() * ROWS),
+    }
+}
+
+function randomUniquePoint(used: Set<string>): Point {
+    let p: Point
+    do {
+        p = randomPoint()
+    } while (used.has(keyOf(p)))
+    used.add(keyOf(p))
+    return p
+}
+
+function generateRandomOrders(n: number): Order[] {
+    const used = new Set<string>()
+    const orders: Order[] = []
+
+    for (let i = 0; i < n; i++) {
+        const pickup = randomUniquePoint(used)
+        const delivery = randomUniquePoint(used)
+
+        orders.push({
+            id: i + 1,
+            pickup,
+            delivery,
+            weight: Math.floor(Math.random() * 20) + 5,
+            status: "pending",
+        })
+    }
+
+    return orders
+}
+
+function generateGasStations(n: number, used: Set<string>): GasStation[] {
+    const stations: GasStation[] = []
+    for (let i = 0; i < n; i++) {
+        stations.push(randomUniquePoint(used))
+    }
+    return stations
+}
+function generateSafeGasStations(step = 40): GasStation[] {
+    const stations: GasStation[] = []
+
+    for (let x = step / 2; x < COLS; x += step) {
+        for (let y = step / 2; y < ROWS; y += step) {
+            stations.push({ x, y })
         }
     }
+
+    return stations
 }
 
-function drawVehicle(ctx: CanvasRenderingContext2D, prev: Point | null, curr: Point) {
-    if (prev) {
-        ctx.clearRect(
-            prev.x * CELL_SIZE,
-            prev.y * CELL_SIZE,
-            CELL_SIZE,
-            CELL_SIZE
-        )
+/* ================= DRAW ================= */
+
+function drawStaticGrid(ctx: CanvasRenderingContext2D) {
+    for (let y = 0; y <= ROWS; y++) {
+        ctx.strokeStyle =
+            y % 10 === 0
+                ? "rgba(0,0,0,0.25)"
+                : "rgba(0,0,0,0.08)"
+        ctx.lineWidth = y % 10 === 0 ? 1.2 : 0.5
+        ctx.beginPath()
+        ctx.moveTo(0, y * CELL_SIZE)
+        ctx.lineTo(WIDTH, y * CELL_SIZE)
+        ctx.stroke()
     }
-    ctx.fillStyle = "red"
-    ctx.fillRect(
-        curr.x * CELL_SIZE + 1,
-        curr.y * CELL_SIZE + 1,
-        CELL_SIZE - 2,
-        CELL_SIZE - 2
-    )
+
+    for (let x = 0; x <= COLS; x++) {
+        ctx.strokeStyle =
+            x % 10 === 0
+                ? "rgba(0,0,0,0.25)"
+                : "rgba(0,0,0,0.08)"
+        ctx.lineWidth = x % 10 === 0 ? 1.2 : 0.5
+        ctx.beginPath()
+        ctx.moveTo(x * CELL_SIZE, 0)
+        ctx.lineTo(x * CELL_SIZE, HEIGHT)
+        ctx.stroke()
+    }
 }
 
-/* ================= PAGE ================= */
-function drawSymbols(ctx: CanvasRenderingContext2D, orders: Order[], gasStations: GasStation[]) {
-    // pickup – xanh lá
+function drawSymbols(
+    ctx: CanvasRenderingContext2D,
+    orders: Order[],
+    gasStations: GasStation[]
+) {
     ctx.fillStyle = "green"
     orders.forEach(o => {
         ctx.fillRect(
@@ -117,7 +173,6 @@ function drawSymbols(ctx: CanvasRenderingContext2D, orders: Order[], gasStations
         )
     })
 
-    // delivery – đỏ
     ctx.fillStyle = "red"
     orders.forEach(o => {
         ctx.fillRect(
@@ -128,7 +183,6 @@ function drawSymbols(ctx: CanvasRenderingContext2D, orders: Order[], gasStations
         )
     })
 
-    // gas station – cam
     ctx.fillStyle = "orange"
     gasStations.forEach(s => {
         ctx.beginPath()
@@ -153,43 +207,99 @@ function drawTrailCell(ctx: CanvasRenderingContext2D, p: Point, count: number) {
     )
 }
 
-/* ================= SOLVER (FULL BÀI TOÁN) ================= */
+function drawVehicle(
+    ctx: CanvasRenderingContext2D,
+    prev: Point | null,
+    curr: Point
+) {
+    if (prev) {
+        ctx.clearRect(
+            prev.x * CELL_SIZE,
+            prev.y * CELL_SIZE,
+            CELL_SIZE,
+            CELL_SIZE
+        )
+    }
+    ctx.fillStyle = "red"
+    ctx.fillRect(
+        curr.x * CELL_SIZE + 1,
+        curr.y * CELL_SIZE + 1,
+        CELL_SIZE - 2,
+        CELL_SIZE - 2
+    )
+}
 
-function solveDelivery(vehicle: Vehicle, orders: Order[], stations: GasStation[], start: Point): {
-    logs: Log[];
-    trail: TrailMap
-} {
+/* ================= SOLVER (SAFE) ================= */
+
+function solveDelivery(
+    vehicle: Vehicle,
+    orders: Order[],
+    stations: GasStation[],
+    start: Point
+) {
     const logs: Log[] = []
     const trail: TrailMap = new Map()
 
-    function nearestStation(from: Point) {
-        return stations.reduce((a, b) =>
-            manhattan(from, a) < manhattan(from, b) ? a : b
-        )
-    }
-
-    function move(to: Point) {
+    function moveSafe(to: Point) {
         const path = buildPath(vehicle.position, to)
-
         for (const p of path) {
-            // ❗ mỗi ô = 1 bước
-            if (vehicle.fuel <= 0) {
-                throw new Error("Hết xăng giữa đường")
+            if (vehicle.fuel < 1 / 20) {
+                throw new Error("Solver error: hết xăng không hợp lệ")
             }
 
-            vehicle.fuel -= 1 / 20   // 1 lít / 20 ô
-            vehicle.position = {...p}
+            vehicle.fuel -= 1 / 20
+            vehicle.position = { ...p }
 
             trail.set(keyOf(p), (trail.get(keyOf(p)) ?? 0) + 1)
-
             logs.push({
-                position: {...p},
+                position: { ...p },
                 action: "move",
                 fuel: vehicle.fuel,
-                load: vehicle.currentLoad
+                load: vehicle.currentLoad,
             })
         }
     }
+
+    function nearestReachableStation(): GasStation | null {
+        const reachable = stations.filter(
+            s =>
+                fuelNeeded(manhattan(vehicle.position, s)) +
+                SAFETY_FUEL <=
+                vehicle.fuel
+        )
+
+        if (reachable.length === 0) return null
+
+        return reachable.reduce((a, b) =>
+            manhattan(vehicle.position, a) <
+            manhattan(vehicle.position, b)
+                ? a
+                : b
+        )
+    }
+
+    function ensureFuelTo(target: Point) {
+        const distToTarget = fuelNeeded(
+            manhattan(vehicle.position, target)
+        )
+
+        const canReachGasAfterTarget = stations.some(s =>
+            distToTarget +
+            fuelNeeded(manhattan(target, s)) +
+            SAFETY_FUEL <= vehicle.fuel
+        )
+
+        if (canReachGasAfterTarget) return
+
+        const station = nearestReachableStation()
+        if (!station) {
+            throw new Error("Map không khả thi: không có gas trong tầm với")
+        }
+
+        moveSafe(station)
+        vehicle.fuel = vehicle.maxFuel
+    }
+
 
 
     while (orders.some(o => o.status !== "delivered")) {
@@ -198,71 +308,72 @@ function solveDelivery(vehicle: Vehicle, orders: Order[], stations: GasStation[]
                 o.status === "pending" &&
                 o.weight + vehicle.currentLoad <= vehicle.capacity
         )
+
         if (!next) {
-            move(start)
+            ensureFuelTo(start)
+            moveSafe(start)
             vehicle.currentLoad = 0
             continue
         }
-        if (fuelNeeded(manhattan(vehicle.position, next.pickup)) > vehicle.fuel) {
-            const s = nearestStation(vehicle.position)
-            move(s)
-            vehicle.fuel = vehicle.maxFuel
-        }
-        move(next.pickup)
+
+        ensureFuelTo(next.pickup)
+        moveSafe(next.pickup)
         vehicle.currentLoad += next.weight
         next.status = "picked"
-        if (fuelNeeded(manhattan(vehicle.position, next.delivery)) > vehicle.fuel) {
-            const s = nearestStation(vehicle.position)
-            move(s)
-            vehicle.fuel = vehicle.maxFuel
-        }
-        move(next.delivery)
+
+        ensureFuelTo(next.delivery)
+        moveSafe(next.delivery)
         vehicle.currentLoad -= next.weight
         next.status = "delivered"
     }
-    move(start)
-    return {logs, trail}
+
+    ensureFuelTo(start)
+    moveSafe(start)
+
+    return { logs, trail }
 }
 
-const start: Point = {x: 125, y: 125}
-const vehicle: Vehicle = {
-    position: {...start},
-    fuel: 30,
-    maxFuel: 30,
-    capacity: 50,
-    currentLoad: 0
-}
-const orders: Order[] = [
-    {id: 1, pickup: {x: 40, y: 60}, delivery: {x: 180, y: 200}, weight: 20, status: "pending"},
-    {id: 2, pickup: {x: 90, y: 30}, delivery: {x: 210, y: 80}, weight: 15, status: "pending"},
-    {id: 3, pickup: {x: 160, y: 140}, delivery: {x: 60, y: 220}, weight: 10, status: "pending"},
-    {id: 4, pickup: {x: 200, y: 40}, delivery: {x: 30, y: 180}, weight: 18, status: "pending"},
-]
-const gasStations: GasStation[] = [
-    // {x: 125, y: 125},
-    {x: 20, y: 20},
-    {x: 230, y: 20},
-    {x: 20, y: 230},
-    {x: 230, y: 230},
-    {x: 80, y: 120},
-    {x: 170, y: 100},
-    {x: 100, y: 200},
-    {x: 200, y: 160},
-]
+/* ================= PAGE ================= */
 
 export default function TestPage() {
     const gridRef = useRef<HTMLCanvasElement>(null)
     const trailRef = useRef<HTMLCanvasElement>(null)
     const vehicleRef = useRef<HTMLCanvasElement>(null)
 
+    const start: Point = {
+        x: Math.floor(COLS / 2),
+        y: Math.floor(ROWS / 2),
+    }
+
+
+    const baseVehicle: Vehicle = {
+        position: { ...start },
+        fuel: 30,
+        maxFuel: 30,
+        capacity: 50,
+        currentLoad: 0,
+    }
+
+    const used = new Set<string>()
+    used.add(keyOf(start))
+
+    const orders = generateRandomOrders(10)
+    orders.forEach(o => {
+        used.add(keyOf(o.pickup))
+        used.add(keyOf(o.delivery))
+    })
+
+    // const gasStations = generateGasStations(8, used)
+
+    const gasStations = generateSafeGasStations(40)
+
     useEffect(() => {
         const gridCtx = gridRef.current!.getContext("2d")!
         drawStaticGrid(gridCtx)
         drawSymbols(gridCtx, orders, gasStations)
 
-
-        const {logs, trail} = solveDelivery(
-            structuredClone(vehicle),
+        const { logs, trail } = solveDelivery(
+            structuredClone(baseVehicle),
             structuredClone(orders),
             gasStations,
             start
@@ -281,9 +392,11 @@ export default function TestPage() {
             }
 
             const curr = logs[i].position
-            const count = trail.get(keyOf(curr)) ?? 1
-
-            drawTrailCell(trailCtx, curr, count)
+            drawTrailCell(
+                trailCtx,
+                curr,
+                trail.get(keyOf(curr)) ?? 1
+            )
             drawVehicle(vehicleCtx, prev, curr)
 
             prev = curr
@@ -294,11 +407,28 @@ export default function TestPage() {
     }, [])
 
     return (
-        <div className="relative" style={{width: WIDTH, height: HEIGHT}}>
-            <canvas ref={gridRef} width={WIDTH} height={HEIGHT} className="absolute"/>
-            <canvas ref={trailRef} width={WIDTH} height={HEIGHT} className="absolute"/>
-            <canvas ref={vehicleRef} width={WIDTH} height={HEIGHT} className="absolute"/>
+        <div
+            className="relative border border-gray-700"
+            style={{ width: WIDTH, height: HEIGHT }}
+        >
+            <canvas
+                ref={gridRef}
+                width={WIDTH}
+                height={HEIGHT}
+                className="absolute"
+            />
+            <canvas
+                ref={trailRef}
+                width={WIDTH}
+                height={HEIGHT}
+                className="absolute"
+            />
+            <canvas
+                ref={vehicleRef}
+                width={WIDTH}
+                height={HEIGHT}
+                className="absolute"
+            />
         </div>
     )
 }
-
